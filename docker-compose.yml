@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # BlackOps principal
+  blackops:
+    build: .
+    container_name: blackops_scanner
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+      - ./blackops:/app/blackops:ro  # Code source en lecture seule
+      - ./scripts:/app/scripts:ro
+    environment:
+      - BLACKOPS_CONFIG=/app/config.yaml
+      - PYTHONPATH=/app
+      - K8S_TOKEN=${K8S_TOKEN:-}
+      - K8S_CA_CERT=${K8S_CA_CERT:-}
+    networks:
+      - scan_network
+    depends_on:
+      - tor-proxy
+      - test-mongodb
+      - test-mysql
+      - test-postgres
+      - test-redis
+      - test-elasticsearch
+    command: python3 scripts/blackops-cli.py --ip-list /app/data/ips/test_targets.lst --output docker_scan --deep
+    restart: "no"
+
+  # Proxy SOCKS5 (Tor)
+  tor-proxy:
+    image: dperson/torproxy:latest
+    container_name: tor_proxy
+    ports:
+      - "9050:9050"  # SOCKS5
+      - "8118:8118"  # HTTP proxy (Privoxy)
+    networks:
+      - scan_network
+    restart: unless-stopped
+
+  # === SERVICES DE TEST (targets vulnérables volontairement) ===
+  
+  # MongoDB sans auth (volontairement vulnérable)
+  test-mongodb:
+    image: mongo:6.0
+    container_name: test_mongodb
+    ports:
+      - "27017:27017"
+      - "28017:28017"  # HTTP interface
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=
+      - MONGO_INITDB_ROOT_PASSWORD=
+    networks:
+      - scan_network
+    command: mongod --bind_ip_all --httpinterface
+    restart: unless-stopped
+
+  # MySQL avec root:root (volontairement faible)
+  test-mysql:
+    image: mysql:8.0
+    container_name: test_mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=testdb
+      - MYSQL_USER=testuser
+      - MYSQL_PASSWORD=testpass
+    networks:
+      - scan_network
+    restart: unless-stopped
+
+  # PostgreSQL avec postgres:postgres (volontairement faible)
+  test-postgres:
+    image: postgres:15
+    container_name: test_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=testdb
+    networks:
+      - scan_network
+    restart: unless-stopped
+
+  # Redis sans auth
+  test-redis:
+    image: redis:7.2
+    container_name: test_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ""  # Pas de mot de passe
+    networks:
+      - scan_network
+    restart: unless-stopped
+
+  # Elasticsearch sans auth (volontairement vulnérable)
+  test-elasticsearch:
+    image: elasticsearch:8.10.2
+    container_name: test_elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    networks:
+      - scan_network
+    restart: unless-stopped
+
+  # Optionnel: Kind ou Minikube pour Kubernetes (plus complexe)
+  # Optionnel: PostgreSQL avec extensions dangereuses
+  test-postgres-dangerous:
+    image: postgres:15
+    container_name: test_postgres_dangerous
+    ports:
+      - "5433:5432"  # Port différent pour ne pas conflit
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    networks:
+      - scan_network
+    command: postgres -c shared_preload_libraries='dblink,adminpack'
+    restart: unless-stopped
+
+networks:
+  scan_network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+  mysql_data:
+  postgres_data:
+  redis_data:
+  elasticsearch_data:

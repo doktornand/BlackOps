@@ -1,0 +1,100 @@
+# BlackOps Configuration - Complete Version
+proxy:
+  socks5:
+    host: tor-proxy  # Dans Docker, utiliser le nom du service
+    port: 9050
+    enabled: true
+  http:
+    host: tor-proxy
+    port: 8118
+    enabled: true
+
+stealth:
+  jitter_min: 0.5
+  jitter_max: 2.5
+  user_agents:
+    - "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+    - "Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)"
+    - "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15"
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+  randomize_order: true
+
+scan:
+  timeout: 5
+  max_retries: 2
+  parallel: 5
+  rate_limit: 1.0
+
+anomaly_detection:
+  baseline_std_multiplier: 2.5
+  slow_threshold_ms: 200
+  error_burst_threshold: 3
+  # Nouvelles métriques
+  credential_leak_score: 0.3
+  version_vulnerability_score: 0.4
+
+logging:
+  level: INFO
+  format: json
+  file: "logs/blackops.log"
+  max_bytes: 10485760
+  backup_count: 5
+  # Optionnel: envoyer à Elasticsearch
+  elasticsearch:
+    enabled: false
+    host: elasticsearch:9200
+    index: "blackops-logs"
+
+reports:
+  formats:
+    - csv
+    - json
+    - html
+  output_dir: "data/output"
+  # Nouveau: rapport détaillé par anomalie
+  include_evidence: true
+  max_evidence_size: 1000
+
+# Configuration de tous les modules
+modules:
+  mongodb:
+    enabled: true
+    ports: [27017]
+    http_port: 28017
+    commands: ["listDatabases", "buildInfo", "serverStatus"]
+    timeout: 5
+    
+  mysql:
+    enabled: true
+    ports: [3306]
+    default_users: ["root", "mysql", "admin"]
+    default_passwords: ["", "root", "mysql", "admin", "password"]
+    timeout: 5
+    
+  postgresql:
+    enabled: true
+    ports: [5432]
+    default_users: ["postgres", "admin"]
+    default_passwords: ["", "postgres", "admin"]
+    timeout: 5
+    dangerous_extensions: ["dblink", "file_fdw", "adminpack", "pgcrypto"]
+    
+  redis:
+    enabled: true
+    ports: [6379]
+    timeout: 5
+    max_keys_sample: 1000
+    
+  elasticsearch:
+    enabled: true
+    ports: [9200, 9300]
+    timeout: 5
+    sensitive_index_patterns: ["*.log", "*.audit", "*.security", "user*", "payment*", "credit*"]
+    
+  kubernetes:
+    enabled: true
+    ports: [6443, 8001]
+    timeout: 5
+    token: null  # Surcharger avec variable d'environnement
+    ca_cert: null
+    check_dashboard: true
